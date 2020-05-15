@@ -1,0 +1,291 @@
+<html lang="ko">
+<body>
+<div id="container">
+
+   <input type="range" min = 0 max = 0.1 step=0.001 value="0" name="g" id="g">
+   <label for="g"> Gravity </label><br>
+   <input type="range" min = 0 max = 0.1 step=0.001 value="0" name="air_fric" id="air_fric">
+   <label for="air_fric"> Air friction </label><br>
+   <input type="range" min = 0 max = 1 step=0.01 value="1" name="ball_e" id="ball_e">
+   <label for="ball_e"> Ball e constant </label><br>
+   <input type="range" min = 0 max = 1 step=0.01 value="1" name="wall_e" id="wall_e">
+   <label for="wall_e"> Wall e constant </label><br>
+   <input type="range" min = 10 max = 80 step=1 value="30" name="ball_size" id="ball_size">
+   <label for="ball_size"> First ball size </label><br>
+   <svg id = "cvs" height="480" width="900" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+      <rect fill="#bde1ef" height="480" id="cvs_1" stroke="#000000" stroke-width="5" width="900" x="0.5" y="0.5"></rect>
+      <image height="174" id="svg_34" width="231.99999" x="311" xlink:href="https://image.flaticon.com/icons/svg/728/728069.svg" y="32"></image>
+   </svg>
+</div>
+
+<script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/svg.js/2.6.3/svg.min.js"></script>
+<script src="//unpkg.com/mathjs@4.0.1/dist/math.min.js"></script>
+<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js" type="text/javascript"></script>
+
+<script>
+   let C_0 = 0.1, sx = 0, sy = 0, ex = 900, ey = 480, obj_xin = -1, obj_yin = -2, obj_top = 0, obj_btm = 1, obj_srt = 2, obj_end = 3, obj_top_c = 4, obj_btm_c = 5, obj_srt_c = 6, obj_end_c = 7, frame = 4;
+   let wall_fric = 1, g = 0, air_fric = 0, ball_e = 1, wall_e = 1;
+   let first_ball_size = 30;
+
+   let ball_cnt = 4, radius = 30, dsize = 700, spt = [25, 25];
+   SVGObjects = {};
+   SID = [];
+   t = 0;
+   darray = [];
+   l_cnt = math.ceil(math.sqrt(ball_cnt));
+   cvs = document.getElementById("cvs");
+
+   tv = $('[name=tv]');
+   tv2 = $('[name=tv2]');
+
+   let label_g = $("label[for='g']");
+   let slider_g = $("#g");
+   slider_g.on('input', function() {
+      label_g.html( $(this).val() );
+      g = $(this).val();
+
+      for (var i in SID) {
+         SVGObjects[SID[i]].acc_y = parseFloat(g);
+      }
+   });
+
+   let label_a = $("label[for='air_fric']");
+   let slider_a = $("#air_fric");
+   slider_a.on('input', function() {
+      label_a.html( $(this).val() );
+      air_fric = $(this).val();
+
+      for (var i in SID) {
+         SVGObjects[SID[i]].fric = math.pow(0.95, parseFloat(air_fric));
+      }
+   });
+
+   let label_e = $("label[for='ball_e']");
+   let slider_e = $("#ball_e");
+   slider_e.on('input', function() {
+      label_e.html( $(this).val() );
+      ball_e = $(this).val();
+
+      for (var i in SID) {
+         SVGObjects[SID[i]].e = parseFloat(ball_e);
+      }
+   });
+
+   let label_we = $("label[for='wall_e']");
+   let slider_we = $("#wall_e");
+   slider_we.on('input', function() {
+      label_we.html( $(this).val() );
+      wall_e = $(this).val();
+   });
+
+   let label_bs = $("label[for='ball_size']");
+   let slider_bs = $("#ball_size");
+   slider_bs.on('input', function() {
+      label_bs.html( $(this).val() );
+      r = parseFloat($(this).val());
+      SVGObjects[SID[0]].radius = r;
+      SVGObjects[SID[0]].mass = math.pow(r, 2);
+      $("#" + SID[0]).attr("width" , r * 2);
+      $("#" + SID[0]).attr("height" , r * 2);
+   });
+
+
+   window.onload = () => {newWindow();};
+
+   function SVGObject (id, fric, r, e) {
+      this.obj = SVG.get(id);
+      this.id = id;
+      this.e = e;
+      this.vx = 0, this.vy = 0;
+      this.acc_x = 0, this.acc_y = 0;
+      this.radius = r;
+      this.fric = math.pow(0.95, fric);
+      this.mass = math.pow(r, 2);
+
+      this.loop_sub = (loop) => {
+         this.obj.dmove(this.vx, this.vy);
+
+         //collision calc.
+         yc = bd_check_y(this.y(), this.height());
+         xc = bd_check_x(this.x(), this.width());
+         if(yc == obj_btm) {
+            this.vy = math.abs(this.vy) * (-1) * wall_e;
+            this.setPosition(this.x(), ey - this.height() - 2);
+         }
+         if(yc == obj_top) {
+            this.vy = math.abs(this.vy) * wall_e;
+            this.setPosition(this.x(), 2);
+         }
+         if(xc == obj_srt) {
+            this.vx = math.abs(this.vx) * wall_e;
+            this.setPosition(2, this.y());
+         }
+         if(xc == obj_end) {
+            this.vx = math.abs(this.vx) * (-1) * wall_e;
+            this.setPosition(ex - this.width() - 2, this.y());
+         }
+         if(yc == obj_btm_c || yc == obj_top_c) {
+            this.vx *= wall_fric;
+         }
+         if(xc == obj_srt_c || xc == obj_end_c) {
+            this.vy *= wall_fric;
+         }
+
+         this.vx *= this.fric;
+         this.vy *= this.fric;
+         this.vx += this.acc_x;
+         this.vy += this.acc_y;
+
+         this.val2 = math.pow(this.vx, 2) + math.pow(this.vy, 2)
+         //little velocity
+         /*if(this.val2 <= 0.0001 && this.val2 > 0){
+             if(this.acc_x == 0) this.vx = 0;
+             if(this.acc_y == 0) this.vy = 0;
+         }*/
+
+         if(this.acc_y != 0){
+            if(math.abs(this.vy) < 50 * this.acc_y && this.vy > 0 && this.y() > ey - this.height() - 3){
+               this.vy = 0;
+               this.setPosition(this.x(), ey - this.height() - 1);
+            }
+         }
+      };
+
+      this.setInitSpeed = (x, y) => {
+         this.vx = x; this.vy = y;
+      }
+      this.setPosition = (x, y) => {
+         this.obj.move(x, y);
+      }
+      this.enableGravity = (g) => {
+         this.acc_y += g;
+      }
+      this.x = () => {
+         return this.obj.x();
+      }
+      this.y = () => {
+         return this.obj.y();
+      }
+      this.width = () => {
+         return this.obj.width();
+      }
+      this.height = () => {
+         return this.obj.height();
+      }
+
+   }
+
+   let bd_check_x = (x, width) => {
+      if(x <= sx) return obj_srt;
+      else if(x >= ex - width) return obj_end;
+      else if(x >= ex - width - 1) return obj_end_c;
+      else if(x <= sx + 1) return obj_srt_c;
+      else return obj_xin;
+   }
+   let bd_check_y = (y, height) => {
+      if(y <= sy) return obj_top;
+      else if(y >= ey - height) return obj_btm;
+      else if(y >= ey - height - 1) return obj_btm_c;
+      else if(y <= sy + 1) return obj_top_c;
+      else return obj_yin;
+   }
+   let newWindow = () => {
+      SID.forEach((id) => {document.getElementById(id).addEventListener('click', onObjClicked);});
+      ex = cvs.clientWidth;
+      ey = cvs.clientHeight;
+   }
+   let onObjClicked = (evt) => {
+      var id = event.target.id;
+      SVGObjects[id].setInitSpeed(5*math.random(), 5*math.random());
+
+   }
+   let loop_main = () => {
+      var ball = SVGObjects["obj_1"];
+      //tv2.html(f(ball.vx) + " | " + f(ball.vy));
+      //tv.html(f(ball.x()) + " | " + f(ball.y()));
+
+
+      for(var i = 0; i < ball_cnt; i++){
+         var svg1 = SVGObjects[SID[i]];
+         svg1.loop_sub();
+         for(var j = i; j < ball_cnt; j++){
+            if(i != j){
+               var svg2 = SVGObjects[SID[j]];
+               var delta_x = (svg1.x() + svg1.radius) - (svg2.x() + svg2.radius);
+               var delta_y = (svg1.y() + svg1.radius) - (svg2.y() + svg2.radius);
+               var r2 = math.pow(svg1.radius + svg2.radius, 2);
+               var dis2 = (math.pow(delta_x, 2) + math.pow(delta_y, 2));
+               if(dis2 < r2 && !svg1.c3 && !svg2.c3){
+                  kx = calc_v(svg1.mass, svg2.mass, svg1.vx, svg2.vx, svg1.e);
+                  ky = calc_v(svg1.mass, svg2.mass, svg1.vy, svg2.vy, svg2.e);
+                  svg1.setInitSpeed(kx.v1, ky.v1);
+                  svg2.setInitSpeed(kx.v2, ky.v2);
+                  svg1.setPosition(svg1.l_x, svg1.l_y);
+                  svg2.setPosition(svg2.l_x, svg2.l_y);
+                  svg1.c3 = true;
+                  svg2.c3 = true;
+                  //tv.html(svg1.l_x + " | " + svg1.l_y);
+               } else if(dis2 > r2) {
+                  svg1.c3 = false;
+                  svg2.c3 = false;
+                  svg1.l_x = svg1.x();
+                  svg1.l_y = svg1.y();
+                  svg2.l_x = svg2.x();
+                  svg2.l_y = svg2.y();
+               }
+            }
+         }
+      }
+
+      t++;
+   }
+   let f = (num) => {return num.toFixed(3)};
+   let createObject = (id, r, x, y) => {
+      elec = document.createElementNS("http://www.w3.org/2000/svg", "image");
+      elec.setAttributeNS(null, "id", id);
+      elec.setAttributeNS(null, "height", r*2 + "");
+      elec.setAttributeNS(null, "width", r*2 + "");
+      elec.setAttributeNS(null, "x", x + "");
+      elec.setAttributeNS(null, "y", y + "");
+      elec.setAttributeNS("http://www.w3.org/1999/xlink", "href", "https://image.flaticon.com/icons/svg/1239/1239063.svg");
+      cvs.appendChild(elec);
+   }
+   let calc_v = (m1, m2, u1, u2, e) => {
+      v1 = ((m1 - e * m2) * u1 + (1 + e) * m2 * u2) / (m1 + m2);
+      v2 = ((m2 - e * m1) * u2 + (1 + e) * m1 * u1) / (m1 + m2);
+      var k = {v1: v1, v2: v2};
+      return k;
+   }
+
+   //ID record
+   var pt = "";
+   for (var i = 1; i <= ball_cnt; i++){SID.push("obj_" + i);}
+   for (var i = 1; i <= l_cnt; i++){
+      for (var j = 1; j <= l_cnt; j++){
+         darray.push({x : 150 * i, y : 150 * j});
+      }
+   }
+
+
+
+   for (var i in SID) {
+      //create Objects
+      let radius_n = ((i == 0) ? first_ball_size : radius);
+
+      createObject(SID[i], radius_n, darray[i].x, darray[i].y);
+      //Put Objects
+      SVGObjects[SID[i]] = new SVGObject(SID[i], air_fric, radius_n, ball_e);
+      SVGObjects[SID[i]].enableGravity(g);
+      //SVGObjects[SID[i]].setInitSpeed(5*math.random(), 5*math.random());
+   }
+
+
+   //Interval
+   j = setInterval(loop_main, frame);
+
+
+
+
+</script>
+</body>
+</html>
